@@ -89,8 +89,8 @@ def find_hot_routes(fname=FNAME, nSimul=NSIM, nSamp=NSAMP, numRoutes=5, randSeed
     coordBounds = coordinate_bounds(df)
 
     for (i, H) in random_routes(coordBounds, nSimul):
-        if i % 10 == 0:
-            print "i = {}".format(i)
+        if i % 100 == 0:
+            print i
         fa = fAvg(H, random_ride_sample(df, nSamp))
         bestyet = best_yet(bestyet, fa, H, numRoutes)
 
