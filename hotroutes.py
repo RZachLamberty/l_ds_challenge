@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import csv
 import numpy
 import pandas
 import random
@@ -32,6 +33,8 @@ AB = numpy.array([ALPHA, BETA])
 
 # data files
 FNAME = './rides.csv'
+ONAME = './hotroutes.csv'
+FIELDNAMES = ['start_lat', 'start_lng', 'end_lat', 'end_lng']
 
 # rand
 SEED = 17
@@ -77,10 +80,35 @@ def fAvg(H, r):
 
 
 # ----------------------------- #
-#   Main routine                #
+#   simulation version          #
 # ----------------------------- #
 
-def find_hot_routes(fname=FNAME, nSimul=NSIM, nSamp=NSAMP, numRoutes=5, randSeed=SEED):
+def main(fname=FNAME, nSimul=NSIM, nSamp=NSAMP, numRoutes=5,
+         randSeed=SEED, oname=ONAME):
+    bestyet = find_hot_routes(
+        fname=fname,
+        nSimul=nSimul,
+        nSamp=nSamp,
+        numRoutes=numRoutes,
+        randSeed=randSeed,
+    )
+    # write that ish to file as requested
+    with open(oname, 'w') as fOut:
+        c = csv.DictWriter(fOut, fieldnames=FIELDNAMES)
+        c.writeheader()
+        c.writerows([
+            {
+                'start_lat': H[0][0],
+                'start_lng': H[0][1],
+                'end_lat': H[1][0],
+                'end_lng': H[1][1],
+            }
+            for (fa, H) in bestyet.items()
+        ])
+
+
+def find_hot_routes(fname=FNAME, nSimul=NSIM, nSamp=NSAMP, numRoutes=5,
+                    randSeed=SEED, oname=ONAME):
     """ docstring """
     df = load_data(fname)
     numpy.random.seed(seed=randSeed)
@@ -89,8 +117,8 @@ def find_hot_routes(fname=FNAME, nSimul=NSIM, nSamp=NSAMP, numRoutes=5, randSeed
     coordBounds = coordinate_bounds(df)
 
     for (i, H) in random_routes(coordBounds, nSimul):
-        if i % 100 == 0:
-            print i
+        if i % (nSimul // 100) == 0:
+            print '{:2d}% done'.format(i // (nSimul // 100))
         fa = fAvg(H, random_ride_sample(df, nSamp))
         bestyet = best_yet(bestyet, fa, H, numRoutes)
 
@@ -151,6 +179,7 @@ def best_yet(bestyet, probNow, H, numRoutes):
             bestyet[probNow] = H
 
     return bestyet
+
 
 # ----------------------------- #
 #   Command line                #
