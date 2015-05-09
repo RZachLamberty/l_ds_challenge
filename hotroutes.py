@@ -38,8 +38,8 @@ FIELDNAMES = ['start_lat', 'start_lng', 'end_lat', 'end_lng']
 
 # rand
 SEED = 17
-NSIM = 1000
-NSAMP = 10000
+NROUTES = 10000
+NRIDES = 10000
 
 
 # ----------------------------- #
@@ -80,18 +80,19 @@ def fAvg(H, r):
 
 
 # ----------------------------- #
-#   simulation version          #
+#   hotroute calculation        #
 # ----------------------------- #
 
-def main(fname=FNAME, nSimul=NSIM, nSamp=NSAMP, numRoutes=5,
-         randSeed=SEED, oname=ONAME):
+def main(fname=FNAME, nRoutes=NROUTES, nRides=NRIDES, keepBest=5, randSeed=SEED,
+         oname=ONAME):
     bestyet = find_hot_routes(
         fname=fname,
-        nSimul=nSimul,
-        nSamp=nSamp,
-        numRoutes=numRoutes,
+        nRoutes=nRoutes,
+        nRides=nRides,
+        keepBest=keepBest,
         randSeed=randSeed,
     )
+
     # write that ish to file as requested
     with open(oname, 'w') as fOut:
         c = csv.DictWriter(fOut, fieldnames=FIELDNAMES)
@@ -107,70 +108,76 @@ def main(fname=FNAME, nSimul=NSIM, nSamp=NSAMP, numRoutes=5,
         ])
 
 
-def find_hot_routes(fname=FNAME, nSimul=NSIM, nSamp=NSAMP, numRoutes=5,
+def find_hot_routes(fname=FNAME, nRoutes=NROUTES, nRides=NRIDES, keepBest=5,
                     randSeed=SEED, oname=ONAME):
-    """ docstring """
+    """ Find the 5 best combos of pickup / dropoff locales in the data """
     df = load_data(fname)
-    numpy.random.seed(seed=randSeed)
     bestyet = {}
 
-    coordBounds = coordinate_bounds(df)
-
-    for (i, H) in random_routes(coordBounds, nSimul):
-        if i % (nSimul // 100) == 0:
-            print '{:2d}% done'.format(i // (nSimul // 100))
-        fa = fAvg(H, random_ride_sample(df, nSamp))
-        bestyet = best_yet(bestyet, fa, H, numRoutes)
+    for route in routes(df, nRoutes):
+        sampleRides = sample_rides(df, nRides)
+        fa = fAvg(route, sampleRides)
+        bestyet = best_yet(bestyet, fa, route, keepBest)
 
     return bestyet
 
 
-def coordinate_bounds(df):
-    """ find the bounding values for the df """
-    return [
-        df.start_lat.min(),
-        df.start_lat.max(),
-        df.start_lng.min(),
-        df.start_lng.max(),
-        df.end_lat.min(),
-        df.end_lat.max(),
-        df.end_lng.min(),
-        df.end_lng.max(),
-    ]
-
-
-def random_routes(coordBounds, nSimul=NSIM):
-    """ randomly choose a start and end point H. Use properties of df """
-    x0Min, x0Max, y0Min, y0Max, x1Min, x1Max, y1Min, y1Max = coordBounds
+def routes(df, nRoutes=NROUTES):
     i = 0
-    while i < nSimul:
-        yield (
-            i,
-            [
-                [
-                    numpy.random.uniform(x0Min, x0Max),
-                    numpy.random.uniform(y0Min, y0Max)
-                ],
-                [
-                    numpy.random.uniform(x1Min, x1Max),
-                    numpy.random.uniform(y1Min, y1Max)
-                ],
-            ]
-        )
+    onePerCent = (nRoutes // 100)
+    #for route in product_route(df):
+    for route in random_route(df):
+        # just a stupid progress bar
+        if i % onePerCent == 0:
+            print '{:2d}% done'.format(i // onePerCent)
+
+        yield route
+
+        i += 1
+        if i == nRoutes:
+            break
+
+
+def random_route(df):
+    """ randomly choose a start and end point H. Use properties of df """
+    L = df.shape[0]
+    i = 0
+    while i < L:
+        route = df.iloc[numpy.random.randint(0, L)]
+        yield [[route.start_lat, route.start_lng], [route.end_lat, route.end_lng]]
         i += 1
 
 
-def random_ride_sample(df, nSamp=NSAMP):
-    """ return a random sample of nSamp rows from df"""
-    return df.iloc[random.sample(df.index, nSamp)]
+def product_route(df):
+    """ return an iterator which is merely the cartesian product of all
+        pickup and dropoff points in df
+
+    """
+    L = df.shape[0]
+    for i in xrange(L):
+        # pickup location for ride i
+        s = df.iloc[i]
+        slat = s.start_lat
+        slng = s.start_lng
+        for j in xrange(L):
+            # dropoff location for ride j
+            e = df.iloc[j]
+            elat = e.end_lat
+            elng = e.end_lng
+            yield [[slat, slng], [elat, elng]]
 
 
-def best_yet(bestyet, probNow, H, numRoutes):
-    """ if the average probability of a ride for route H is among the numRoutes
+def sample_rides(df, nSample):
+    """ given a data frame, return nSample random rows from it """
+    return df.iloc[numpy.random.choice(df.index.values, nSample)]
+
+
+def best_yet(bestyet, probNow, H, keepBest):
+    """ if the average probability of a ride for route H is among the keepBest
         best values in bestyet, add it and drop the lesser of them
 
     """
-    if len(bestyet) < numRoutes:
+    if len(bestyet) < keepBest:
         bestyet[probNow] = H
     else:
         minProb = min(bestyet.keys())

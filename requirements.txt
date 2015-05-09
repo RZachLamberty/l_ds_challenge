@@ -1,2 +1,9 @@
+ipython
+jinja2
+jsonschema
+pyzmq
+tornado
 numpy
+scipy
 pandas
+matplotlib
